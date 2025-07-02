@@ -21,6 +21,7 @@ export default function DashboardPage() {
     date?: string
     location?: string
     attendees?: number
+    description?: string
   }
   const [myEvents, setMyEvents] = useState<Event[]>([])
   const [registeredEvents, setRegisteredEvents] = useState<Event[]>([])
@@ -256,26 +257,68 @@ export default function DashboardPage() {
                   ) : guests.length === 0 ? (
                     <div className="text-center text-gray-500">No guests registered yet.</div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full border mt-4">
-                        <thead>
-                          <tr>
-                            <th className="text-left p-2">Name</th>
-                            <th className="text-left p-2">Email</th>
-                            <th className="text-left p-2">Wallet</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {guests.map((guest, i) => (
-                            <tr key={i} className="border-t">
-                              <td className="p-2">{guest.name}</td>
-                              <td className="p-2">{guest.email}</td>
-                              <td className="p-2">{guest.address}</td>
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full border mt-4">
+                          <thead>
+                            <tr>
+                              <th className="text-left p-2">Name</th>
+                              <th className="text-left p-2">Email</th>
+                              <th className="text-left p-2">Wallet</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {guests.map((guest, i) => (
+                              <tr key={i} className="border-t">
+                                <td className="p-2">{guest.name}</td>
+                                <td className="p-2">{guest.email}</td>
+                                <td className="p-2">{guest.address}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Mint POAPs Button */}
+                      {sidebarSection === "guests" && guests.length > 0 && (
+                        <div className="flex justify-center mt-6">
+                          <Button
+                            className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-2 rounded-lg"
+                            onClick={async () => {
+                              // 1. Fetch checked-in attendees for the selected event
+                              if (!selectedEventId) {
+                                alert("No event selected.");
+                                return;
+                              }
+                              const attendeesSnapshot = await getDocs(
+                                collection(db, "events", selectedEventId, "attendees")
+                              );
+                              const checkedInAddresses = attendeesSnapshot.docs.map(doc => doc.data().address);
+
+                              // 2. Call backend API to mint POAPs
+                              const event = myEvents.find(e => e.id === selectedEventId);
+                              const res = await fetch("/api/mint-poaps", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  eventId: selectedEventId,
+                                  eventName: event?.title,
+                                  eventDate: event?.date,
+                                  description: event?.description || "",
+                                  recipients: checkedInAddresses,
+                                }),
+                              });
+                              if (res.ok) {
+                                alert("POAPs minted successfully!");
+                              } else {
+                                alert("Failed to mint POAPs.");
+                              }
+                            }}
+                          >
+                            Mint POAPs for Checked-in Guests
+                          </Button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}
