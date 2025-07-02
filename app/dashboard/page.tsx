@@ -30,6 +30,11 @@ export default function DashboardPage() {
   const [showDropdown, setShowDropdown] = useState(false)
   const account = useCurrentAccount()
 
+  // Guest list state
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [guests, setGuests] = useState<any[]>([])
+  const [loadingGuests, setLoadingGuests] = useState(false)
+
   // Fetch events created by the connected wallet
   useEffect(() => {
     const fetchMyEvents = async () => {
@@ -45,8 +50,13 @@ export default function DashboardPage() {
         ...docSnap.data(),
       }))
       setMyEvents(events)
+      // Set default selected event for guests section
+      if (events.length > 0 && !selectedEventId) {
+        setSelectedEventId(events[0].id)
+      }
     }
     fetchMyEvents()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account])
 
   // Fetch registered events for the connected wallet
@@ -76,6 +86,23 @@ export default function DashboardPage() {
     }
     fetchRegisteredEvents()
   }, [account])
+
+  // Fetch guests for the selected event
+  useEffect(() => {
+    const fetchGuests = async () => {
+      if (!selectedEventId) {
+        setGuests([])
+        return
+      }
+      setLoadingGuests(true)
+      const snapshot = await getDocs(collection(db, "events", selectedEventId, "registrations"))
+      setGuests(snapshot.docs.map(doc => doc.data()))
+      setLoadingGuests(false)
+    }
+    if (sidebarSection === "guests" && selectedEventId) {
+      fetchGuests()
+    }
+  }, [selectedEventId, sidebarSection])
 
   return (
     <div className="min-h-screen flex bg-white">
@@ -205,124 +232,171 @@ export default function DashboardPage() {
         {/* Main Dashboard Content */}
         <main className="flex-1 p-6">
           {sidebarSection === "guests" ? (
-            <div className="pt-8 text-center text-gray-500">
-              No guest list available.
+            <div className="pt-8">
+              <h2 className="text-2xl font-semibold mb-4 text-center">Guest List</h2>
+              {myEvents.length === 0 ? (
+                <div className="text-center text-gray-500">No events available.</div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-4 justify-center mb-6">
+                    {myEvents.map((event) => (
+                      <button
+                        key={event.id}
+                        className={`px-4 py-2 rounded-lg border ${
+                          event.id === selectedEventId ? "bg-blue-500 text-white" : "bg-white text-gray-700"
+                        }`}
+                        onClick={() => setSelectedEventId(event.id)}
+                      >
+                        {event.title}
+                      </button>
+                    ))}
+                  </div>
+                  {loadingGuests ? (
+                    <div className="text-center text-gray-500">Loading guests...</div>
+                  ) : guests.length === 0 ? (
+                    <div className="text-center text-gray-500">No guests registered yet.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full border mt-4">
+                        <thead>
+                          <tr>
+                            <th className="text-left p-2">Name</th>
+                            <th className="text-left p-2">Email</th>
+                            <th className="text-left p-2">Wallet</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {guests.map((guest, i) => (
+                            <tr key={i} className="border-t">
+                              <td className="p-2">{guest.name}</td>
+                              <td className="p-2">{guest.email}</td>
+                              <td className="p-2">{guest.address}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           ) : (
-            <div className="grid md:grid-cols-4 gap-6 mb-8">
-              <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-gray-500 text-xs font-medium">Total Events</p>
-                      <p className="text-xl font-bold">{myEvents.length}</p>
+            <>
+              <div className="grid md:grid-cols-4 gap-6 mb-8">
+                <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-500 text-xs font-medium">Total Events</p>
+                        <p className="text-xl font-bold">{myEvents.length}</p>
+                      </div>
+                      <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                        <Calendar className="w-5 h-5 text-gray-400" />
+                      </div>
                     </div>
-                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-gray-400" />
+                  </CardContent>
+                </Card>
+                <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-500 text-xs font-medium">Total Attendees</p>
+                        <p className="text-xl font-bold">
+                          {myEvents.reduce((sum, e) => sum + Number(e.attendees || 0), 0)}
+                        </p>
+                      </div>
+                      <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                        <Users className="w-5 h-5 text-gray-400" />
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-gray-500 text-xs font-medium">Total Attendees</p>
-                      <p className="text-xl font-bold">
-                        {myEvents.reduce((sum, e) => sum + Number(e.attendees || 0), 0)}
-                      </p>
+                  </CardContent>
+                </Card>
+                <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-500 text-xs font-medium">Registered For</p>
+                        <p className="text-xl font-bold">{registeredEvents.length}</p>
+                        <p className="text-gray-400 text-xs mt-1">Upcoming events</p>
+                      </div>
+                      <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                        <MapPin className="w-5 h-5 text-gray-400" />
+                      </div>
                     </div>
-                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
-                      <Users className="w-5 h-5 text-gray-400" />
+                  </CardContent>
+                </Card>
+                <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-500 text-xs font-medium">This Month</p>
+                        <p className="text-xl font-bold">0</p>
+                        <p className="text-gray-400 text-xs mt-1">Events attended</p>
+                      </div>
+                      <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                        <BarChart3 className="w-5 h-5 text-gray-400" />
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-gray-500 text-xs font-medium">Registered For</p>
-                      <p className="text-xl font-bold">{registeredEvents.length}</p>
-                      <p className="text-gray-400 text-xs mt-1">Upcoming events</p>
-                    </div>
-                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
-                      <MapPin className="w-5 h-5 text-gray-400" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-gray-500 text-xs font-medium">This Month</p>
-                      <p className="text-xl font-bold">0</p>
-                      <p className="text-gray-400 text-xs mt-1">Events attended</p>
-                    </div>
-                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
-                      <BarChart3 className="w-5 h-5 text-gray-400" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsContent value="my-events" className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-gray-900">My Events</h2>
+                  </CardContent>
+                </Card>
               </div>
-              {myEvents.length > 0 ? (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {myEvents.map((event) => (
-                    <Card
-                      key={event.id}
-                      className="base-card-light group overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-1 rounded-2xl"
-                    >
-                      <CardContent className="p-4">
-                        <div className="font-bold text-lg">{event.title}</div>
-                        <div className="text-sm text-gray-500">{event.date}</div>
-                        <div className="text-sm text-gray-500">{event.location}</div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <EmptyStateIllustration
-                  type="no-created-events"
-                  title="No events created yet"
-                  description="Start creating amazing events and connect with your audience. Your first event is just a click away!"
-                  actionText="Create Your First Event"
-                  onAction={() => (window.location.href = "/create")}
-                />
-              )}
-            </TabsContent>
-            <TabsContent value="registered" className="space-y-6">
-              <h2 className="text-xl font-semibold text-gray-900">Registered Events</h2>
-              {registeredEvents.length > 0 ? (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {registeredEvents.map((event) => (
-                    <Card key={event.id} className="base-card-light overflow-hidden rounded-2xl">
-                      <CardContent className="p-4">
-                        <div className="font-bold text-lg">{event.title}</div>
-                        <div className="text-sm text-gray-500">{event.date}</div>
-                        <div className="text-sm text-gray-500">{event.location}</div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <EmptyStateIllustration
-                  type="no-registered-events"
-                  title="No registered events"
-                  description="Discover exciting events happening around you and register to join the fun!"
-                  actionText="Explore Events"
-                  onAction={() => (window.location.href = "/discover")}
-                />
-              )}
-            </TabsContent>
-          </Tabs>
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsContent value="my-events" className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-semibold text-gray-900">My Events</h2>
+                  </div>
+                  {myEvents.length > 0 ? (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {myEvents.map((event) => (
+                        <Card
+                          key={event.id}
+                          className="base-card-light group overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-1 rounded-2xl"
+                        >
+                          <CardContent className="p-4">
+                            <div className="font-bold text-lg">{event.title}</div>
+                            <div className="text-sm text-gray-500">{event.date}</div>
+                            <div className="text-sm text-gray-500">{event.location}</div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyStateIllustration
+                      type="no-created-events"
+                      title="No events created yet"
+                      description="Start creating amazing events and connect with your audience. Your first event is just a click away!"
+                      actionText="Create Your First Event"
+                      onAction={() => (window.location.href = "/create")}
+                    />
+                  )}
+                </TabsContent>
+                <TabsContent value="registered" className="space-y-6">
+                  <h2 className="text-xl font-semibold text-gray-900">Registered Events</h2>
+                  {registeredEvents.length > 0 ? (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {registeredEvents.map((event) => (
+                        <Card key={event.id} className="base-card-light overflow-hidden rounded-2xl">
+                          <CardContent className="p-4">
+                            <div className="font-bold text-lg">{event.title}</div>
+                            <div className="text-sm text-gray-500">{event.date}</div>
+                            <div className="text-sm text-gray-500">{event.location}</div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyStateIllustration
+                      type="no-registered-events"
+                      title="No registered events"
+                      description="Discover exciting events happening around you and register to join the fun!"
+                      actionText="Explore Events"
+                      onAction={() => (window.location.href = "/discover")}
+                    />
+                  )}
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
         </main>
       </div>
     </div>
