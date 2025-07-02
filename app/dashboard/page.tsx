@@ -7,7 +7,8 @@ import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Calendar, MapPin, Users, BarChart3 } from "lucide-react"
 import Link from "next/link"
 import { EmptyStateIllustration } from "@/components/empty-state-illustration"
-import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit"
+import { ConnectButton, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit"
+import { Transaction } from "@mysten/sui/transactions"
 import Image from "next/image"
 import { useUser } from "../landing/UserContext"
 import { ProfileDropdown } from "../landing/ProfileDropDown"
@@ -19,6 +20,7 @@ export default function DashboardPage() {
     id: string
     title?: string
     date?: string
+    time?: string
     location?: string
     attendees?: number
     description?: string
@@ -30,6 +32,7 @@ export default function DashboardPage() {
   const { user, logout } = useUser()
   const [showDropdown, setShowDropdown] = useState(false)
   const account = useCurrentAccount()
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction()
 
   // Guest list state
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
@@ -104,6 +107,55 @@ export default function DashboardPage() {
       fetchGuests()
     }
   }, [selectedEventId, sidebarSection])
+
+  // Mint POAPs using Transaction
+  const handleMintPoaps = async () => {
+    if (!selectedEventId) {
+      alert("No event selected.")
+      return
+    }
+    const attendeesSnapshot = await getDocs(
+      collection(db, "events", selectedEventId, "attendees")
+    )
+    const checkedInAddresses = attendeesSnapshot.docs.map(doc => doc.data().address)
+    if (!checkedInAddresses.length) {
+      alert("No checked-in guests to mint POAPs for.")
+      return
+    }
+    const event = myEvents.find(e => e.id === selectedEventId)
+    if (!event) {
+      alert("Event not found.")
+      return
+    }
+    const dateTimeString = `${event.date}T${event.time || "00:00"}:00Z`
+    const eventDateU64 = Math.floor(new Date(dateTimeString).getTime() / 1000)
+
+    const tx = new Transaction()
+    tx.moveCall({
+      target: `${process.env.NEXT_PUBLIC_SUI_PACKAGE_ID}::poap::batch_mint_and_transfer`,
+      arguments: [
+        tx.pure.string(event.title || ""),
+        tx.pure.u64(eventDateU64),
+        tx.pure.string(event.description || ""),
+        tx.pure.vector("address", checkedInAddresses),
+      ],
+    })
+    try {
+      await signAndExecuteTransaction(
+        { transaction: tx },
+        {
+          onSuccess: (result) => {
+            alert("POAPs minted! Tx digest: " + result.digest)
+          },
+          onError: (e) => {
+            alert("Minting failed: " + (e.message || e))
+          },
+        }
+      )
+    } catch (e: any) {
+      alert("Minting failed: " + (e.message || e))
+    }
+  }
 
   return (
     <div className="min-h-screen flex bg-white">
@@ -283,36 +335,7 @@ export default function DashboardPage() {
                         <div className="flex justify-center mt-6">
                           <Button
                             className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-2 rounded-lg"
-                            onClick={async () => {
-                              // 1. Fetch checked-in attendees for the selected event
-                              if (!selectedEventId) {
-                                alert("No event selected.");
-                                return;
-                              }
-                              const attendeesSnapshot = await getDocs(
-                                collection(db, "events", selectedEventId, "attendees")
-                              );
-                              const checkedInAddresses = attendeesSnapshot.docs.map(doc => doc.data().address);
-
-                              // 2. Call backend API to mint POAPs
-                              const event = myEvents.find(e => e.id === selectedEventId);
-                              const res = await fetch("/api/mint-poaps", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  eventId: selectedEventId,
-                                  eventName: event?.title,
-                                  eventDate: event?.date,
-                                  description: event?.description || "",
-                                  recipients: checkedInAddresses,
-                                }),
-                              });
-                              if (res.ok) {
-                                alert("POAPs minted successfully!");
-                              } else {
-                                alert("Failed to mint POAPs.");
-                              }
-                            }}
+                            onClick={handleMintPoaps}
                           >
                             Mint POAPs for Checked-in Guests
                           </Button>
