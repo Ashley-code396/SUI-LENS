@@ -26,6 +26,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEventContext } from "@/context/EventContext"
 import { createEvent } from "@/lib/createEvent"
+import { useCurrentAccount } from "@mysten/dapp-kit"
 
 export default function CreateEventPage() {
   const [eventData, setEventData] = useState({
@@ -68,9 +69,17 @@ export default function CreateEventPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
 
+  const account = useCurrentAccount() // <-- Add this line
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsCreating(true);
+
+    if (!account?.address) {
+      alert("Connect your wallet to create an event.");
+      setIsCreating(false);
+      return;
+    }
 
     // Optionally upload POAP image and get URL here if needed
     let poapImageUrl = "";
@@ -82,6 +91,7 @@ export default function CreateEventPage() {
     // Prepare event data (add more fields as needed)
     const eventToSave = {
       ...eventData,
+      creator: account.address, // <-- Add creator field
       poap: poapData.name
         ? {
             name: poapData.name,
