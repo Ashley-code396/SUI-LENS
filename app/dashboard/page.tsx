@@ -1,30 +1,81 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
-import { Calendar, MapPin, Users, Plus, BarChart3 } from "lucide-react"
+import { Calendar, MapPin, Users, BarChart3 } from "lucide-react"
 import Link from "next/link"
 import { EmptyStateIllustration } from "@/components/empty-state-illustration"
-import { ConnectButton } from "@mysten/dapp-kit"
-import { useEventStore } from "@/store/EventStore"
+import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit"
 import Image from "next/image"
-import GuestList from "@/components/GuestList"
 import { useUser } from "../landing/UserContext"
 import { ProfileDropdown } from "../landing/ProfileDropDown"
+import { db } from "@/lib/firebase"
+import { collection, getDocs, query, where } from "firebase/firestore"
 
 export default function DashboardPage() {
   type Event = {
     id: string
+    title?: string
+    date?: string
+    location?: string
     attendees?: number
   }
-  const myEvents = useEventStore((state) => state.myEvents)
+  const [myEvents, setMyEvents] = useState<Event[]>([])
   const [registeredEvents, setRegisteredEvents] = useState<Event[]>([])
   const [activeTab, setActiveTab] = useState("my-events")
   const [sidebarSection, setSidebarSection] = useState<string>("overview")
   const { user, logout } = useUser()
   const [showDropdown, setShowDropdown] = useState(false)
+  const account = useCurrentAccount()
+
+  // Fetch events created by the connected wallet
+  useEffect(() => {
+    const fetchMyEvents = async () => {
+      if (!account?.address) {
+        setMyEvents([])
+        return
+      }
+      const eventsSnapshot = await getDocs(
+        query(collection(db, "events"), where("creator", "==", account.address))
+      )
+      const events: Event[] = eventsSnapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }))
+      setMyEvents(events)
+    }
+    fetchMyEvents()
+  }, [account])
+
+  // Fetch registered events for the connected wallet
+  useEffect(() => {
+    const fetchRegisteredEvents = async () => {
+      if (!account?.address) {
+        setRegisteredEvents([])
+        return
+      }
+      const eventsSnapshot = await getDocs(collection(db, "events"))
+      const events: Event[] = []
+      for (const docSnap of eventsSnapshot.docs) {
+        const eventId = docSnap.id
+        const regQuery = query(
+          collection(db, "events", eventId, "registrations"),
+          where("address", "==", account.address)
+        )
+        const regSnapshot = await getDocs(regQuery)
+        if (!regSnapshot.empty) {
+          events.push({
+            id: eventId,
+            ...docSnap.data(),
+          })
+        }
+      }
+      setRegisteredEvents(events)
+    }
+    fetchRegisteredEvents()
+  }, [account])
 
   return (
     <div className="min-h-screen flex bg-white">
@@ -154,63 +205,63 @@ export default function DashboardPage() {
         {/* Main Dashboard Content */}
         <main className="flex-1 p-6">
           {sidebarSection === "guests" ? (
-            <div className="pt-8">
-              <GuestList />
+            <div className="pt-8 text-center text-gray-500">
+              No guest list available.
             </div>
           ) : (
             <div className="grid md:grid-cols-4 gap-6 mb-8">
-              <Card className="overflow-hidden border-0 shadow-xl bg-[#56A8FF] text-white rounded-2xl">
+              <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-blue-100 text-xs font-medium">Total Events</p>
+                      <p className="text-gray-500 text-xs font-medium">Total Events</p>
                       <p className="text-xl font-bold">{myEvents.length}</p>
                     </div>
-                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                      <Calendar className="w-5 h-5" />
+                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                      <Calendar className="w-5 h-5 text-gray-400" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
-              <Card className="overflow-hidden border-0 shadow-xl bg-[#10B981] text-white rounded-2xl">
+              <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-green-100 text-xs font-medium">Total Attendees</p>
+                      <p className="text-gray-500 text-xs font-medium">Total Attendees</p>
                       <p className="text-xl font-bold">
                         {myEvents.reduce((sum, e) => sum + Number(e.attendees || 0), 0)}
                       </p>
                     </div>
-                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                      <Users className="w-5 h-5" />
+                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                      <Users className="w-5 h-5 text-gray-400" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
-              <Card className="overflow-hidden border-0 shadow-xl bg-[#8B5CF6] text-white rounded-2xl">
+              <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-purple-100 text-xs font-medium">Registered For</p>
+                      <p className="text-gray-500 text-xs font-medium">Registered For</p>
                       <p className="text-xl font-bold">{registeredEvents.length}</p>
-                      <p className="text-purple-100 text-xs mt-1">Upcoming events</p>
+                      <p className="text-gray-400 text-xs mt-1">Upcoming events</p>
                     </div>
-                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                      <MapPin className="w-5 h-5" />
+                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                      <MapPin className="w-5 h-5 text-gray-400" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
-              <Card className="overflow-hidden border-0 shadow-xl bg-[#F59E0B] text-white rounded-2xl">
+              <Card className="base-card-light overflow-hidden shadow-lg rounded-2xl">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-orange-100 text-xs font-medium">This Month</p>
+                      <p className="text-gray-500 text-xs font-medium">This Month</p>
                       <p className="text-xl font-bold">0</p>
-                      <p className="text-orange-100 text-xs mt-1">Events attended</p>
+                      <p className="text-gray-400 text-xs mt-1">Events attended</p>
                     </div>
-                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                      <BarChart3 className="w-5 h-5" />
+                    <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                      <BarChart3 className="w-5 h-5 text-gray-400" />
                     </div>
                   </div>
                 </CardContent>
@@ -229,7 +280,11 @@ export default function DashboardPage() {
                       key={event.id}
                       className="base-card-light group overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-1 rounded-2xl"
                     >
-                      {/* ...event card rendering... */}
+                      <CardContent className="p-4">
+                        <div className="font-bold text-lg">{event.title}</div>
+                        <div className="text-sm text-gray-500">{event.date}</div>
+                        <div className="text-sm text-gray-500">{event.location}</div>
+                      </CardContent>
                     </Card>
                   ))}
                 </div>
@@ -249,7 +304,11 @@ export default function DashboardPage() {
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {registeredEvents.map((event) => (
                     <Card key={event.id} className="base-card-light overflow-hidden rounded-2xl">
-                      {/* ...registered event card rendering... */}
+                      <CardContent className="p-4">
+                        <div className="font-bold text-lg">{event.title}</div>
+                        <div className="text-sm text-gray-500">{event.date}</div>
+                        <div className="text-sm text-gray-500">{event.location}</div>
+                      </CardContent>
                     </Card>
                   ))}
                 </div>
