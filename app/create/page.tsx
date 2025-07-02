@@ -69,7 +69,7 @@ export default function CreateEventPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
 
-  const account = useCurrentAccount() // <-- Add this line
+  const account = useCurrentAccount()
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -91,7 +91,7 @@ export default function CreateEventPage() {
     // Prepare event data (add more fields as needed)
     const eventToSave = {
       ...eventData,
-      creator: account.address, // <-- Add creator field
+      creator: account.address,
       poap: poapData.name
         ? {
             name: poapData.name,
@@ -102,14 +102,10 @@ export default function CreateEventPage() {
     };
 
     try {
-      // Save event to Firestore and get the event ID
       const eventId = await createEvent(eventToSave);
-
-      // Redirect to the event-created page with the event ID
       router.push(`/event-created/${eventId}`);
     } catch (error) {
       console.error("Error creating event:", error);
-      // Optionally show an error message to the user
     } finally {
       setIsCreating(false);
     }
